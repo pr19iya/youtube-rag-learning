@@ -6,7 +6,8 @@ from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 from sentence_transformers import CrossEncoder
 
-from langchain_ollama import ChatOllama
+from langchain_groq import ChatGroq
+import os
 
 from rag import (
     EMBEDDING_MODEL_NAME,
@@ -66,9 +67,10 @@ reranker_model = CrossEncoder(
 
 print("Connecting to Ollama...")
 
-chat_model = ChatOllama(
+llm = ChatGroq(
     model=CHAT_MODEL_NAME,
     temperature=0,
+    api_key=os.getenv("GROQ_API_KEY"),
 )
 
 print("Models loaded successfully.")
