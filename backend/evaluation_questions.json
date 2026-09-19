@@ -1,0 +1,27 @@
+[
+    {
+        "question": "What is RAG?",
+        "expected_keywords": [
+            "retrieval",
+            "generation"
+        ]
+    },
+    {
+        "question": "What problem does the speaker explain?",
+        "expected_keywords": [
+            "problem"
+        ]
+    },
+    {
+        "question": "What technique is discussed in the video?",
+        "expected_keywords": [
+            "technique"
+        ]
+    },
+    {
+        "question": "What is the main idea of the video?",
+        "expected_keywords": [
+            "main"
+        ]
+    }
+]

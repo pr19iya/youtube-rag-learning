@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube RAG Assistant",
+  "version": "1.0.0",
+  "description": "Ask questions and summarize YouTube videos using a RAG pipeline.",
+
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "sidePanel"
+  ],
+
+  "host_permissions": [
+    "http://localhost:8000/*",
+    "https://www.youtube.com/*"
+  ],
+
+  "action": {
+    "default_title": "YouTube RAG Assistant"
+  },
+
+  "side_panel": {
+    "default_path": "popup.html"
+  },
+
+  "background": {
+    "service_worker": "background.js"
+  }
+}

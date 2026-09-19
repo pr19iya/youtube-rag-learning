@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+youtube-transcript-api
+sentence-transformers
+langchain
+langchain-groq
+langchain-core
+faiss-cpu
+numpy
+pydantic
+rank-bm25
+python-dotenvtouch 

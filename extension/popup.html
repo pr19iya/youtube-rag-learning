@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTube RAG Assistant</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+
+  <div class="app">
+
+    <!-- Header -->
+    <header class="app-header">
+
+      <div class="brand">
+        <div class="logo">✦</div>
+
+        <div>
+          <h1>YT RAG</h1>
+          <p>Talk to this video</p>
+        </div>
+      </div>
+
+      <div class="header-status" title="Extension status">
+        <span class="status-dot"></span>
+      </div>
+
+    </header>
+
+
+    <!-- Current Video -->
+    <section class="video-card">
+
+      <div class="section-label">
+        <span>VIDEO</span>
+      </div>
+
+      <div class="video-content">
+
+        <div class="thumbnail-wrapper">
+          <img
+            id="videoThumbnail"
+            class="video-thumbnail"
+            src=""
+            alt="YouTube video thumbnail"
+          >
+
+          <div id="thumbnailPlaceholder" class="thumbnail-placeholder">
+            ▶
+          </div>
+        </div>
+
+        <div class="video-details">
+
+          <h2 id="videoTitle">
+            Detecting YouTube video...
+          </h2>
+
+          <p id="videoId" class="video-id">
+            Please wait
+          </p>
+
+          <div id="videoStatus" class="video-status">
+            <span class="status-dot"></span>
+            <span id="videoStatusText">Checking video...</span>
+          </div>
+
+        </div>
+
+      </div>
+
+      <button
+        id="loadVideoBtn"
+        class="primary-btn"
+      >
+        <span id="loadBtnIcon">✦</span>
+        <span id="loadBtnText">Analyze Video</span>
+      </button>
+
+      <div id="status"></div>
+
+    </section>
+
+
+    <!-- Chat -->
+    <section id="chatSection" class="chat-section">
+
+      <div class="section-heading">
+
+        <div>
+          <span class="section-label">CHAT WITH VIDEO</span>
+          <p>Ask a question about the transcript</p>
+        </div>
+
+      </div>
+
+
+      <!-- Conversation -->
+      <div
+        id="conversationContainer"
+        class="conversation-container"
+      >
+
+        <div
+          id="emptyChat"
+          class="empty-chat"
+        >
+
+          <div class="empty-icon">✦</div>
+
+          <h3>Ask about this video</h3>
+
+          <p>
+            Get answers directly from the video's transcript.
+          </p>
+
+          <div class="suggestion-list">
+
+            <button
+              class="suggestion-btn"
+              data-question="What is the main topic being discussed in this video?"
+            >
+              What is this video about?
+            </button>
+
+            <button
+              class="suggestion-btn"
+              data-question="Explain the key concept discussed in the video."
+            >
+              Explain the key concept
+            </button>
+
+            <button
+              class="suggestion-btn"
+              data-question="What are the most important things I should remember from this video?"
+            >
+              What should I remember?
+            </button>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- Question Input -->
+      <div class="input-wrapper">
+
+        <textarea
+          id="questionInput"
+          placeholder="Ask anything about this video..."
+          rows="2"
+        ></textarea>
+
+        <button
+          id="askBtn"
+          class="send-btn"
+          title="Ask AI"
+        >
+          ↑
+        </button>
+
+      </div>
+
+      <p class="input-hint">
+        Press Enter to ask · Shift + Enter for new line
+      </p>
+
+    </section>
+
+
+    <!-- Summary -->
+    <section class="summary-section">
+
+      <div class="section-heading">
+
+        <div>
+          <span class="section-label">VIDEO SUMMARY</span>
+          <p>Choose how you want to summarize it</p>
+        </div>
+
+      </div>
+
+      <div class="summary-buttons">
+
+        <button
+          class="summary-btn"
+          data-style="short"
+        >
+          <span class="summary-icon">S</span>
+          <span>
+            <strong>Short</strong>
+            <small>Quick overview</small>
+          </span>
+        </button>
+
+        <button
+          class="summary-btn"
+          data-style="detailed"
+        >
+          <span class="summary-icon">D</span>
+          <span>
+            <strong>Detailed</strong>
+            <small>Full explanation</small>
+          </span>
+        </button>
+
+        <button
+          class="summary-btn"
+          data-style="points"
+        >
+          <span class="summary-icon">✓</span>
+          <span>
+            <strong>Key Points</strong>
+            <small>Important takeaways</small>
+          </span>
+        </button>
+
+      </div>
+
+
+      <div
+        id="summaryContainer"
+        class="summary-container"
+      ></div>
+
+    </section>
+
+
+    <!-- Footer -->
+    <footer class="app-footer">
+
+      <span>Powered by RAG + AI</span>
+
+      <span class="footer-divider">•</span>
+
+      <span>YouTube Assistant</span>
+
+    </footer>
+
+  </div>
+
+
+  <script src="popup.js"></script>
+
+</body>
+</html>
