@@ -9,4 +9,4 @@ faiss-cpu
 numpy
 pydantic
 rank-bm25
-python-dotenvtouch 
+python-dotenv
