@@ -1,3 +1,5 @@
+torch==2.8.0+cpu
+--extra-index-url https://download.pytorch.org/whl/cpu
 fastapi
 uvicorn
 youtube-transcript-api

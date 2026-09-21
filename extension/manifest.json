@@ -11,9 +11,9 @@
   ],
 
   "host_permissions": [
-    "http://localhost:8000/*",
-    "https://www.youtube.com/*"
-  ],
+  "https://youtube-rag-backend-415792043702.asia-south1.run.app/*",
+  "https://www.youtube.com/*"
+],
 
   "action": {
     "default_title": "YouTube RAG Assistant"

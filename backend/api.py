@@ -55,25 +55,25 @@ app.add_middleware(
 
 print("Loading embedding model...")
 
-embedding_model = SentenceTransformer(
-    EMBEDDING_MODEL_NAME
-)
+# embedding_model = SentenceTransformer(
+#     EMBEDDING_MODEL_NAME
+# )
 
-print("Loading reranker model...")
+# print("Loading reranker model...")
 
-reranker_model = CrossEncoder(
-    "cross-encoder/ms-marco-MiniLM-L-6-v2"
-)
+# reranker_model = CrossEncoder(
+#     "cross-encoder/ms-marco-MiniLM-L-6-v2"
+# )
 
-print("Connecting to Ollama...")
+# print("Connecting to Ollama...")
 
-llm = ChatGroq(
-    model=CHAT_MODEL_NAME,
-    temperature=0,
-    api_key=os.getenv("GROQ_API_KEY"),
-)
+# llm = ChatGroq(
+#     model=CHAT_MODEL_NAME,
+#     temperature=0,
+#     api_key=os.getenv("GROQ_API_KEY"),
+# )
 
-print("Models loaded successfully.")
+# print("Models loaded successfully.")
 
 
 # --------------------------------------------------
@@ -83,6 +83,51 @@ print("Models loaded successfully.")
 video_sessions = {}
 
 
+# --------------------------------------------------
+# Lazy AI model loaders
+# --------------------------------------------------
+
+embedding_model = None
+reranker_model = None
+chat_model = None
+
+
+def get_embedding_model():
+    global embedding_model
+
+    if embedding_model is None:
+        print("Loading embedding model...")
+        embedding_model = SentenceTransformer(
+            EMBEDDING_MODEL_NAME
+        )
+
+    return embedding_model
+
+
+def get_reranker_model():
+    global reranker_model
+
+    if reranker_model is None:
+        print("Loading reranker model...")
+        reranker_model = CrossEncoder(
+            "cross-encoder/ms-marco-MiniLM-L-6-v2"
+        )
+
+    return reranker_model
+
+
+def get_chat_model():
+    global chat_model
+
+    if chat_model is None:
+        print("Connecting to Groq...")
+        chat_model = ChatGroq(
+            model=CHAT_MODEL_NAME,
+            temperature=0,
+            api_key=os.getenv("GROQ_API_KEY"),
+        )
+
+    return chat_model
 # --------------------------------------------------
 # Request models
 # --------------------------------------------------
@@ -146,10 +191,12 @@ def load_video(request: LoadVideoRequest):
 
     if not loaded_from_cache:
 
-        chunks, faiss_index = process_video(
-            video_id,
-            embedding_model,
-        )
+        embedding_model = get_embedding_model()
+
+    chunks, faiss_index = process_video(
+        video_id,
+        embedding_model,
+    )
 
     if chunks is None or faiss_index is None:
         raise HTTPException(
@@ -216,15 +263,18 @@ def chat(request: ChatRequest):
     # Rewrite follow-up question
     # ----------------------------------------------
 
+    chat_model = get_chat_model()
+
     standalone_question = rewrite_question(
-        question=question,
-        conversation_history=conversation_history,
-        chat_model=chat_model,
-    )
+    question=question,
+    conversation_history=conversation_history,
+    chat_model=chat_model,
+)
 
     # ----------------------------------------------
     # First-stage retrieval
     # ----------------------------------------------
+    embedding_model = get_embedding_model()
     retrieved_chunks = hybrid_retrieval(
     question=standalone_question,
     embedding_model=embedding_model,
@@ -245,7 +295,7 @@ def chat(request: ChatRequest):
     # ----------------------------------------------
     # Reranking
     # ----------------------------------------------
-
+    reranker_model = get_reranker_model()
     reranked_chunks = rerank_chunks(
         question=standalone_question,
         retrieved_chunks=retrieved_chunks,

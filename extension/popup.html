@@ -1,9 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
   <title>YouTube RAG Assistant</title>
+
   <link rel="stylesheet" href="popup.css">
 </head>
 
@@ -11,35 +14,48 @@
 
   <div class="app">
 
-    <!-- Header -->
+    <!-- =========================
+         HEADER
+    ========================== -->
     <header class="app-header">
 
       <div class="brand">
+
         <div class="logo">✦</div>
 
-        <div>
+        <div class="brand-text">
           <h1>YT RAG</h1>
           <p>Talk to this video</p>
         </div>
+
       </div>
 
-      <div class="header-status" title="Extension status">
+      <div
+        class="header-status"
+        title="Extension status"
+        aria-label="Extension status"
+      >
         <span class="status-dot"></span>
       </div>
 
     </header>
 
 
-    <!-- Current Video -->
+    <!-- =========================
+         CURRENT VIDEO
+    ========================== -->
     <section class="video-card">
 
       <div class="section-label">
         <span>VIDEO</span>
       </div>
 
+
       <div class="video-content">
 
+        <!-- Thumbnail -->
         <div class="thumbnail-wrapper">
+
           <img
             id="videoThumbnail"
             class="video-thumbnail"
@@ -47,51 +63,93 @@
             alt="YouTube video thumbnail"
           >
 
-          <div id="thumbnailPlaceholder" class="thumbnail-placeholder">
+          <div
+            id="thumbnailPlaceholder"
+            class="thumbnail-placeholder"
+            aria-hidden="true"
+          >
             ▶
           </div>
+
         </div>
 
+
+        <!-- Video information -->
         <div class="video-details">
 
           <h2 id="videoTitle">
             Detecting YouTube video...
           </h2>
 
-          <p id="videoId" class="video-id">
+          <p
+            id="videoId"
+            class="video-id"
+          >
             Please wait
           </p>
 
-          <div id="videoStatus" class="video-status">
+
+          <div
+            id="videoStatus"
+            class="video-status"
+          >
+
             <span class="status-dot"></span>
-            <span id="videoStatusText">Checking video...</span>
+
+            <span id="videoStatusText">
+              Checking video...
+            </span>
+
           </div>
 
         </div>
 
       </div>
 
+
+      <!-- Analyze button -->
       <button
         id="loadVideoBtn"
         class="primary-btn"
+        type="button"
       >
+
         <span id="loadBtnIcon">✦</span>
-        <span id="loadBtnText">Analyze Video</span>
+
+        <span id="loadBtnText">
+          Analyze Video
+        </span>
+
       </button>
 
+
+      <!-- Backend / loading status -->
       <div id="status"></div>
 
     </section>
 
 
-    <!-- Chat -->
-    <section id="chatSection" class="chat-section">
+
+    <!-- =========================
+         CHAT
+    ========================== -->
+    <section
+      id="chatSection"
+      class="chat-section"
+    >
 
       <div class="section-heading">
 
         <div>
-          <span class="section-label">CHAT WITH VIDEO</span>
-          <p>Ask a question about the transcript</p>
+
+          <span class="section-label">
+            CHAT WITH VIDEO
+          </span>
+
+          <p>
+            Ask a question about the transcript
+          </p>
+
         </div>
 
       </div>
@@ -103,37 +161,54 @@
         class="conversation-container"
       >
 
+        <!-- Empty state -->
         <div
           id="emptyChat"
           class="empty-chat"
         >
 
-          <div class="empty-icon">✦</div>
+          <div
+            class="empty-icon"
+            aria-hidden="true"
+          >
+            ✦
+          </div>
 
-          <h3>Ask about this video</h3>
+
+          <h3>
+            Ask about this video
+          </h3>
+
 
           <p>
             Get answers directly from the video's transcript.
           </p>
 
+
+          <!-- Suggested questions -->
           <div class="suggestion-list">
 
             <button
               class="suggestion-btn"
+              type="button"
               data-question="What is the main topic being discussed in this video?"
             >
               What is this video about?
             </button>
 
+
             <button
               class="suggestion-btn"
+              type="button"
               data-question="Explain the key concept discussed in the video."
             >
               Explain the key concept
             </button>
 
+
             <button
               class="suggestion-btn"
+              type="button"
               data-question="What are the most important things I should remember from this video?"
             >
               What should I remember?
@@ -146,24 +221,31 @@
       </div>
 
 
-      <!-- Question Input -->
+      <!-- =========================
+           QUESTION INPUT
+      ========================== -->
       <div class="input-wrapper">
 
         <textarea
           id="questionInput"
           placeholder="Ask anything about this video..."
           rows="2"
+          aria-label="Ask a question about the video"
         ></textarea>
+
 
         <button
           id="askBtn"
           class="send-btn"
+          type="button"
           title="Ask AI"
+          aria-label="Ask AI"
         >
           ↑
         </button>
 
       </div>
+
 
       <p class="input-hint">
         Press Enter to ask · Shift + Enter for new line
@@ -172,56 +254,119 @@
     </section>
 
 
-    <!-- Summary -->
+
+    <!-- =========================
+         SUMMARY
+    ========================== -->
     <section class="summary-section">
 
       <div class="section-heading">
 
         <div>
-          <span class="section-label">VIDEO SUMMARY</span>
-          <p>Choose how you want to summarize it</p>
+
+          <span class="section-label">
+            VIDEO SUMMARY
+          </span>
+
+          <p>
+            Choose how you want to summarize it
+          </p>
+
         </div>
 
       </div>
 
+
+      <!-- Summary options -->
       <div class="summary-buttons">
 
         <button
           class="summary-btn"
+          type="button"
           data-style="short"
         >
-          <span class="summary-icon">S</span>
-          <span>
-            <strong>Short</strong>
-            <small>Quick overview</small>
+
+          <span
+            class="summary-icon"
+            aria-hidden="true"
+          >
+            S
           </span>
+
+          <span>
+
+            <strong>
+              Short
+            </strong>
+
+            <small>
+              Quick overview
+            </small>
+
+          </span>
+
         </button>
+
 
         <button
           class="summary-btn"
+          type="button"
           data-style="detailed"
         >
-          <span class="summary-icon">D</span>
-          <span>
-            <strong>Detailed</strong>
-            <small>Full explanation</small>
+
+          <span
+            class="summary-icon"
+            aria-hidden="true"
+          >
+            D
           </span>
+
+          <span>
+
+            <strong>
+              Detailed
+            </strong>
+
+            <small>
+              Full explanation
+            </small>
+
+          </span>
+
         </button>
+
 
         <button
           class="summary-btn"
+          type="button"
           data-style="points"
         >
-          <span class="summary-icon">✓</span>
-          <span>
-            <strong>Key Points</strong>
-            <small>Important takeaways</small>
+
+          <span
+            class="summary-icon"
+            aria-hidden="true"
+          >
+            ✓
           </span>
+
+          <span>
+
+            <strong>
+              Key Points
+            </strong>
+
+            <small>
+              Important takeaways
+            </small>
+
+          </span>
+
         </button>
 
       </div>
 
 
+      <!-- Generated summary appears here -->
       <div
         id="summaryContainer"
         class="summary-container"
@@ -230,21 +375,32 @@
     </section>
 
 
-    <!-- Footer -->
+
+    <!-- =========================
+         FOOTER
+    ========================== -->
     <footer class="app-footer">
 
-      <span>Powered by RAG + AI</span>
+      <span>
+        Powered by RAG + AI
+      </span>
 
-      <span class="footer-divider">•</span>
+      <span class="footer-divider">
+        •
+      </span>
 
-      <span>YouTube Assistant</span>
+      <span>
+        YouTube Assistant
+      </span>
 
     </footer>
 
   </div>
 
 
+  <!-- JavaScript -->
   <script src="popup.js"></script>
 
 </body>
+
 </html>

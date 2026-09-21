@@ -2,7 +2,8 @@
 // YouTube RAG Assistant - Side Panel
 // =========================================
 
-const API_URL = "http://localhost:8000";
+const API_URL =
+  "https://youtube-rag-backend-415792043702.asia-south1.run.app";
 
 let currentVideoId = null;
 let currentVideoUrl = null;
@@ -14,23 +15,44 @@ let isAsking = false;
 // DOM
 // =========================================
 
-const videoThumbnail = document.getElementById("videoThumbnail");
-const thumbnailPlaceholder = document.getElementById("thumbnailPlaceholder");
-const videoTitle = document.getElementById("videoTitle");
-const videoIdElement = document.getElementById("videoId");
-const videoStatus = document.getElementById("videoStatus");
-const videoStatusText = document.getElementById("videoStatusText");
+const videoThumbnail =
+  document.getElementById("videoThumbnail");
 
-const loadVideoBtn = document.getElementById("loadVideoBtn");
-const loadBtnText = document.getElementById("loadBtnText");
-const loadBtnIcon = document.getElementById("loadBtnIcon");
-const statusElement = document.getElementById("status");
+const thumbnailPlaceholder =
+  document.getElementById("thumbnailPlaceholder");
+
+const videoTitle =
+  document.getElementById("videoTitle");
+
+const videoIdElement =
+  document.getElementById("videoId");
+
+const videoStatus =
+  document.getElementById("videoStatus");
+
+const videoStatusText =
+  document.getElementById("videoStatusText");
+
+const loadVideoBtn =
+  document.getElementById("loadVideoBtn");
+
+const loadBtnText =
+  document.getElementById("loadBtnText");
+
+const loadBtnIcon =
+  document.getElementById("loadBtnIcon");
+
+const statusElement =
+  document.getElementById("status");
 
 const conversationContainer =
   document.getElementById("conversationContainer");
 
-const questionInput = document.getElementById("questionInput");
-const askBtn = document.getElementById("askBtn");
+const questionInput =
+  document.getElementById("questionInput");
+
+const askBtn =
+  document.getElementById("askBtn");
 
 const summaryContainer =
   document.getElementById("summaryContainer");
@@ -53,6 +75,7 @@ function extractVideoId(url) {
     if (parsed.hostname.includes("youtu.be")) {
       return parsed.pathname.substring(1);
     }
+
   } catch (error) {
     console.error("Invalid URL:", error);
   }
@@ -66,23 +89,37 @@ function extractVideoId(url) {
 // =========================================
 
 function formatTime(seconds) {
-  if (seconds === undefined || seconds === null) {
+  if (
+    seconds === undefined ||
+    seconds === null ||
+    Number.isNaN(Number(seconds))
+  ) {
     return "00:00";
   }
 
-  seconds = Math.floor(Number(seconds));
+  seconds = Math.max(0, Math.floor(Number(seconds)));
 
-  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
   const secs = seconds % 60;
 
-  return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  if (hours > 0) {
+    return `${String(hours).padStart(2, "0")}:${String(
+      minutes
+    ).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  }
+
+  return `${String(minutes).padStart(2, "0")}:${String(
+    secs
+  ).padStart(2, "0")}`;
 }
 
 
 function buildTimestampUrl(videoId, seconds) {
-  return `https://www.youtube.com/watch?v=${videoId}&t=${Math.floor(
-    Number(seconds) || 0
-  )}s`;
+  const timestamp =
+    Math.max(0, Math.floor(Number(seconds) || 0));
+
+  return `https://www.youtube.com/watch?v=${videoId}&t=${timestamp}s`;
 }
 
 
@@ -92,12 +129,14 @@ function buildTimestampUrl(videoId, seconds) {
 
 async function getCurrentVideo() {
   return new Promise((resolve) => {
+
     chrome.tabs.query(
       {
         active: true,
         currentWindow: true
       },
       (tabs) => {
+
         const tab = tabs[0];
 
         if (!tab || !tab.url) {
@@ -128,7 +167,9 @@ async function getCurrentVideo() {
 // =========================================
 
 function cleanYouTubeTitle(title) {
-  if (!title) return "YouTube Video";
+  if (!title) {
+    return "YouTube Video";
+  }
 
   return title
     .replace(/\s*-\s*YouTube\s*$/i, "")
@@ -141,10 +182,15 @@ function cleanYouTubeTitle(title) {
 // =========================================
 
 function setVideoStatus(type, message) {
-  if (!videoStatus || !videoStatusText) return;
+  if (!videoStatus || !videoStatusText) {
+    return;
+  }
 
-  videoStatus.className = `video-status ${type}`;
-  videoStatusText.textContent = message;
+  videoStatus.className =
+    `video-status ${type}`;
+
+  videoStatusText.textContent =
+    message;
 }
 
 
@@ -153,9 +199,18 @@ function setVideoStatus(type, message) {
 // =========================================
 
 function updateVideoUI(video) {
+
   if (!video) {
-    videoTitle.textContent = "No YouTube video detected";
-    videoIdElement.textContent = "Open a YouTube video first";
+
+    currentVideoId = null;
+    currentVideoUrl = null;
+    videoLoaded = false;
+
+    videoTitle.textContent =
+      "No YouTube video detected";
+
+    videoIdElement.textContent =
+      "Open a YouTube video first";
 
     if (videoThumbnail) {
       videoThumbnail.style.display = "none";
@@ -166,34 +221,57 @@ function updateVideoUI(video) {
     }
 
     loadVideoBtn.disabled = true;
-    loadBtnText.textContent = "Analyze Video";
 
-    setVideoStatus("error", "No video detected");
+    loadBtnText.textContent =
+      "Analyze Video";
+
+    setVideoStatus(
+      "error",
+      "No video detected"
+    );
 
     return;
   }
 
+
   currentVideoId = video.id;
   currentVideoUrl = video.url;
 
-  videoTitle.textContent = cleanYouTubeTitle(video.title);
-  videoIdElement.textContent = `youtube.com/watch?v=${video.id}`;
+  videoTitle.textContent =
+    cleanYouTubeTitle(video.title);
+
+  videoIdElement.textContent =
+    `youtube.com/watch?v=${video.id}`;
+
 
   if (videoThumbnail) {
+
     videoThumbnail.src =
       `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`;
 
-    videoThumbnail.style.display = "block";
+    videoThumbnail.style.display =
+      "block";
   }
+
 
   if (thumbnailPlaceholder) {
-    thumbnailPlaceholder.style.display = "none";
+    thumbnailPlaceholder.style.display =
+      "none";
   }
 
-  loadVideoBtn.disabled = false;
-  loadBtnText.textContent = "Analyze Video";
 
-  setVideoStatus("ready", "Ready to analyze");
+  loadVideoBtn.disabled = false;
+
+  loadBtnText.textContent =
+    "Analyze Video";
+
+  loadBtnIcon.textContent =
+    "✦";
+
+  setVideoStatus(
+    "ready",
+    "Ready to analyze"
+  );
 }
 
 
@@ -202,60 +280,142 @@ function updateVideoUI(video) {
 // =========================================
 
 async function loadCurrentVideo() {
-  if (!currentVideoId) return;
+
+  if (!currentVideoId) {
+    return;
+  }
+
+  videoLoaded = false;
 
   loadVideoBtn.disabled = true;
-  loadBtnIcon.textContent = "↻";
-  loadBtnText.textContent = "Analyzing...";
-  statusElement.textContent = "";
 
-  setVideoStatus("loading", "Processing transcript...");
+  loadBtnIcon.textContent =
+    "↻";
+
+  loadBtnText.textContent =
+    "Analyzing...";
+
+  statusElement.textContent =
+    "";
+
+  setVideoStatus(
+    "loading",
+    "Processing transcript..."
+  );
+
 
   try {
-    const response = await fetch(`${API_URL}/video/load`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        video_id: currentVideoId
-      })
-    });
+
+    const response =
+      await fetch(
+        `${API_URL}/video/load`,
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body: JSON.stringify({
+            video_id:
+              currentVideoId
+          })
+        }
+      );
+
 
     if (!response.ok) {
-      throw new Error(`Server error: ${response.status}`);
+
+      let errorMessage =
+        `Server error: ${response.status}`;
+
+      try {
+        const errorData =
+          await response.json();
+
+        if (errorData.detail) {
+          errorMessage =
+            typeof errorData.detail === "string"
+              ? errorData.detail
+              : JSON.stringify(
+                  errorData.detail
+                );
+        }
+
+      } catch (_) {
+        // Ignore JSON parsing error
+      }
+
+      throw new Error(errorMessage);
     }
 
-    const data = await response.json();
+
+    const data =
+      await response.json();
+
 
     videoLoaded = true;
 
-    loadBtnIcon.textContent = "✓";
-    loadBtnText.textContent = "Video Ready";
 
-    setVideoStatus("success", "Transcript ready");
+    loadBtnIcon.textContent =
+      "✓";
+
+    loadBtnText.textContent =
+      "Video Ready";
+
+
+    setVideoStatus(
+      "success",
+      "Transcript ready"
+    );
+
 
     if (data.cached) {
-      statusElement.textContent = "Loaded from cache";
+
+      statusElement.textContent =
+        "Loaded from cache";
+
     } else {
-      statusElement.textContent = "Transcript processed successfully";
+
+      statusElement.textContent =
+        "Transcript processed successfully";
     }
+
 
     enableChat();
 
   } catch (error) {
-    console.error("Load error:", error);
 
-    loadBtnIcon.textContent = "✦";
-    loadBtnText.textContent = "Analyze Video";
+    console.error(
+      "Load error:",
+      error
+    );
 
-    setVideoStatus("error", "Could not process video");
+
+    videoLoaded = false;
+
+    loadBtnIcon.textContent =
+      "✦";
+
+    loadBtnText.textContent =
+      "Analyze Video";
+
+
+    setVideoStatus(
+      "error",
+      "Could not process video"
+    );
+
 
     statusElement.textContent =
-      error.message || "Something went wrong";
+      error.message ||
+      "Something went wrong";
 
   } finally {
-    loadVideoBtn.disabled = false;
+
+    loadVideoBtn.disabled =
+      false;
   }
 }
 
@@ -265,7 +425,11 @@ async function loadCurrentVideo() {
 // =========================================
 
 function escapeHtml(value) {
-  if (value === undefined || value === null) {
+
+  if (
+    value === undefined ||
+    value === null
+  ) {
     return "";
   }
 
@@ -283,9 +447,14 @@ function escapeHtml(value) {
 // =========================================
 
 function formatAnswer(text) {
-  if (!text) return "";
 
-  let html = escapeHtml(text);
+  if (!text) {
+    return "";
+  }
+
+  let html =
+    escapeHtml(text);
+
 
   // Bold
   html = html.replace(
@@ -293,14 +462,18 @@ function formatAnswer(text) {
     "<strong>$1</strong>"
   );
 
+
   // Inline code
   html = html.replace(
     /`([^`]+)`/g,
     "<code>$1</code>"
   );
 
-  // Convert new lines
-  html = html.replace(/\n/g, "<br>");
+
+  // New lines
+  html =
+    html.replace(/\n/g, "<br>");
+
 
   return html;
 }
@@ -311,19 +484,29 @@ function formatAnswer(text) {
 // =========================================
 
 function addUserMessage(question) {
-  const message = document.createElement("div");
 
-  message.className = "chat-message user-message";
+  const message =
+    document.createElement("div");
+
+  message.className =
+    "chat-message user-message";
+
 
   message.innerHTML = `
-    <div class="message-label">You</div>
+    <div class="message-label">
+      You
+    </div>
 
     <div class="user-bubble">
       ${escapeHtml(question)}
     </div>
   `;
 
-  conversationContainer.appendChild(message);
+
+  conversationContainer.appendChild(
+    message
+  );
+
 
   scrollChatToBottom();
 }
@@ -333,15 +516,27 @@ function addUserMessage(question) {
 // AI RESPONSE
 // =========================================
 
-function addAssistantMessage(answer, sources = []) {
-  const message = document.createElement("div");
+function addAssistantMessage(
+  answer,
+  sources = []
+) {
 
-  message.className = "chat-message assistant-message";
+  const message =
+    document.createElement("div");
+
+  message.className =
+    "chat-message assistant-message";
+
 
   message.innerHTML = `
     <div class="assistant-header">
-      <div class="assistant-avatar">✦</div>
-      <span>YT RAG</span>
+      <div class="assistant-avatar">
+        ✦
+      </div>
+
+      <span>
+        YT RAG
+      </span>
     </div>
 
     <div class="assistant-answer">
@@ -349,42 +544,80 @@ function addAssistantMessage(answer, sources = []) {
     </div>
 
     <div class="answer-actions">
-      <button class="copy-answer-btn" type="button">
+      <button
+        class="copy-answer-btn"
+        type="button"
+      >
         <span>⧉</span>
         Copy
       </button>
     </div>
   `;
 
-  conversationContainer.appendChild(message);
+
+  conversationContainer.appendChild(
+    message
+  );
+
 
   const copyButton =
-    message.querySelector(".copy-answer-btn");
+    message.querySelector(
+      ".copy-answer-btn"
+    );
 
-  copyButton.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(answer);
 
-      copyButton.innerHTML = `
-        <span>✓</span>
-        Copied
-      `;
+  if (copyButton) {
 
-      setTimeout(() => {
-        copyButton.innerHTML = `
-          <span>⧉</span>
-          Copy
-        `;
-      }, 1500);
+    copyButton.addEventListener(
+      "click",
+      async () => {
 
-    } catch (error) {
-      console.error("Copy failed:", error);
-    }
-  });
+        try {
 
-  if (sources && sources.length > 0) {
-    renderSources(message, sources);
+          await navigator.clipboard.writeText(
+            answer
+          );
+
+
+          copyButton.innerHTML = `
+            <span>✓</span>
+            Copied
+          `;
+
+
+          setTimeout(() => {
+
+            copyButton.innerHTML = `
+              <span>⧉</span>
+              Copy
+            `;
+
+          }, 1500);
+
+
+        } catch (error) {
+
+          console.error(
+            "Copy failed:",
+            error
+          );
+        }
+      }
+    );
   }
+
+
+  if (
+    Array.isArray(sources) &&
+    sources.length > 0
+  ) {
+
+    renderSources(
+      message,
+      sources
+    );
+  }
+
 
   scrollChatToBottom();
 }
@@ -394,14 +627,24 @@ function addAssistantMessage(answer, sources = []) {
 // SOURCES
 // =========================================
 
-function renderSources(parentElement, sources) {
-  const sourcesWrapper = document.createElement("div");
+function renderSources(
+  parentElement,
+  sources
+) {
 
-  sourcesWrapper.className = "sources-section";
+  const sourcesWrapper =
+    document.createElement("div");
+
+  sourcesWrapper.className =
+    "sources-section";
+
 
   sourcesWrapper.innerHTML = `
     <div class="sources-title">
-      <span>Sources</span>
+      <span>
+        Sources
+      </span>
+
       <span class="sources-count">
         ${sources.length}
       </span>
@@ -410,81 +653,103 @@ function renderSources(parentElement, sources) {
     <div class="source-list"></div>
   `;
 
+
   const sourceList =
-    sourcesWrapper.querySelector(".source-list");
+    sourcesWrapper.querySelector(
+      ".source-list"
+    );
 
-  sources.forEach((source, index) => {
-    const start =
-      source.start ??
-      source.start_time ??
-      source.timestamp ??
-      0;
 
-    const end =
-      source.end ??
-      source.end_time ??
-      null;
+  sources.forEach(
+    (source, index) => {
 
-    const text =
-      source.text ||
-      source.content ||
-      source.chunk ||
-      "Transcript excerpt";
+      const start =
+        source.start ??
+        source.start_time ??
+        source.timestamp ??
+        0;
 
-    const sourceCard =
-      document.createElement("div");
 
-    sourceCard.className = "source-card";
+      const end =
+        source.end ??
+        source.end_time ??
+        null;
 
-    const timeText =
-      end !== null
-        ? `${formatTime(start)} – ${formatTime(end)}`
-        : formatTime(start);
 
-    const timestampUrl =
-      buildTimestampUrl(
-        currentVideoId,
-        start
+      const text =
+        source.text ||
+        source.content ||
+        source.chunk ||
+        "Transcript excerpt";
+
+
+      const sourceCard =
+        document.createElement("div");
+
+      sourceCard.className =
+        "source-card";
+
+
+      const timeText =
+        end !== null
+          ? `${formatTime(start)} – ${formatTime(end)}`
+          : formatTime(start);
+
+
+      const timestampUrl =
+        buildTimestampUrl(
+          currentVideoId,
+          start
+        );
+
+
+      sourceCard.innerHTML = `
+        <div class="source-number">
+          ${String(index + 1).padStart(2, "0")}
+        </div>
+
+        <div class="source-main">
+
+          <div class="source-top">
+
+            <a
+              class="source-time"
+              href="${timestampUrl}"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              ${timeText}
+            </a>
+
+            <a
+              class="source-open"
+              href="${timestampUrl}"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open in YouTube ↗
+            </a>
+
+          </div>
+
+          <div class="source-text">
+            ${escapeHtml(text)}
+          </div>
+
+        </div>
+      `;
+
+
+      sourceList.appendChild(
+        sourceCard
       );
+    }
+  );
 
-    sourceCard.innerHTML = `
-      <div class="source-number">
-        ${String(index + 1).padStart(2, "0")}
-      </div>
 
-      <div class="source-main">
-
-        <div class="source-top">
-          <a
-  class="source-time"
-  href="${timestampUrl}"
-  target="_blank"
-  rel="noopener noreferrer"
->
-  ${timeText}
-</a>
-
-          <a
-            class="source-open"
-            href="${timestampUrl}"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Open in YouTube ↗
-          </a>
-        </div>
-
-        <div class="source-text">
-          ${escapeHtml(text)}
-        </div>
-
-      </div>
-    `;
-
-    sourceList.appendChild(sourceCard);
-  });
-
-  parentElement.appendChild(sourcesWrapper);
+  parentElement.appendChild(
+    sourcesWrapper
+  );
 }
 
 
@@ -493,15 +758,23 @@ function renderSources(parentElement, sources) {
 // =========================================
 
 function addLoadingMessage() {
-  const message = document.createElement("div");
+
+  const message =
+    document.createElement("div");
 
   message.className =
     "chat-message assistant-message loading-message";
 
+
   message.innerHTML = `
     <div class="assistant-header">
-      <div class="assistant-avatar">✦</div>
-      <span>YT RAG</span>
+      <div class="assistant-avatar">
+        ✦
+      </div>
+
+      <span>
+        YT RAG
+      </span>
     </div>
 
     <div class="typing-indicator">
@@ -511,9 +784,14 @@ function addLoadingMessage() {
     </div>
   `;
 
-  conversationContainer.appendChild(message);
+
+  conversationContainer.appendChild(
+    message
+  );
+
 
   scrollChatToBottom();
+
 
   return message;
 }
@@ -524,70 +802,150 @@ function addLoadingMessage() {
 // =========================================
 
 async function askQuestion(question) {
-  if (!question || !question.trim()) return;
 
-  if (!videoLoaded) {
-    statusElement.textContent =
-      "Analyze the video before asking questions.";
+  if (
+    !question ||
+    !question.trim()
+  ) {
     return;
   }
 
-  if (isAsking) return;
+
+  if (!videoLoaded) {
+
+    statusElement.textContent =
+      "Analyze the video before asking questions.";
+
+    return;
+  }
+
+
+  if (isAsking) {
+    return;
+  }
+
 
   isAsking = true;
 
-  const cleanQuestion = question.trim();
+
+  const cleanQuestion =
+    question.trim();
+
 
   hideEmptyChat();
 
-  addUserMessage(cleanQuestion);
 
-  questionInput.value = "";
+  addUserMessage(
+    cleanQuestion
+  );
 
-  askBtn.disabled = true;
+
+  questionInput.value =
+    "";
+
+
+  askBtn.disabled =
+    true;
+
 
   const loadingMessage =
     addLoadingMessage();
 
+
   try {
-    const response = await fetch(`${API_URL}/chat`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        video_id: currentVideoId,
-        question: cleanQuestion
-      })
-    });
+
+    const response =
+      await fetch(
+        `${API_URL}/chat`,
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body: JSON.stringify({
+            video_id:
+              currentVideoId,
+
+            question:
+              cleanQuestion
+          })
+        }
+      );
+
 
     if (!response.ok) {
+
+      let errorMessage =
+        `Server error: ${response.status}`;
+
+      try {
+
+        const errorData =
+          await response.json();
+
+        if (errorData.detail) {
+
+          errorMessage =
+            typeof errorData.detail === "string"
+              ? errorData.detail
+              : JSON.stringify(
+                  errorData.detail
+                );
+        }
+
+      } catch (_) {
+        // Ignore JSON parsing error
+      }
+
+
       throw new Error(
-        `Server error: ${response.status}`
+        errorMessage
       );
     }
 
-    const data = await response.json();
+
+    const data =
+      await response.json();
+
 
     loadingMessage.remove();
 
+
     addAssistantMessage(
-      data.answer || "No answer was generated.",
+      data.answer ||
+        "No answer was generated.",
       data.sources || []
     );
 
+
   } catch (error) {
-    console.error("Chat error:", error);
+
+    console.error(
+      "Chat error:",
+      error
+    );
+
 
     loadingMessage.remove();
 
+
     addAssistantMessage(
-      "I couldn't generate an answer right now. Please make sure the backend and Ollama are running."
+      `I couldn't generate an answer right now.
+
+${error.message || "Please try again."}`
     );
 
+
   } finally {
-    isAsking = false;
-    askBtn.disabled = false;
+
+    isAsking =
+      false;
+
+    askBtn.disabled =
+      false;
 
     questionInput.focus();
   }
@@ -599,11 +957,17 @@ async function askQuestion(question) {
 // =========================================
 
 function hideEmptyChat() {
+
   const emptyChat =
-    document.getElementById("emptyChat");
+    document.getElementById(
+      "emptyChat"
+    );
+
 
   if (emptyChat) {
-    emptyChat.style.display = "none";
+
+    emptyChat.style.display =
+      "none";
   }
 }
 
@@ -613,8 +977,12 @@ function hideEmptyChat() {
 // =========================================
 
 function enableChat() {
-  questionInput.disabled = false;
-  askBtn.disabled = false;
+
+  questionInput.disabled =
+    false;
+
+  askBtn.disabled =
+    false;
 
   questionInput.placeholder =
     "Ask anything about this video...";
@@ -626,11 +994,24 @@ function enableChat() {
 // =========================================
 
 async function generateSummary(style) {
-  if (!videoLoaded) {
+
+  if (!currentVideoId) {
+
     statusElement.textContent =
-      "Analyze the video first.";
+      "No YouTube video detected.";
+
     return;
   }
+
+
+  if (!videoLoaded) {
+
+    statusElement.textContent =
+      "Analyze the video first.";
+
+    return;
+  }
+
 
   summaryContainer.innerHTML = `
     <div class="summary-loading">
@@ -639,33 +1020,91 @@ async function generateSummary(style) {
     </div>
   `;
 
+
   try {
-    const response = await fetch(
-      `${API_URL}/summary`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          video_id: currentVideoId,
-          style: style
-        })
-      }
-    );
+
+    const response =
+      await fetch(
+        `${API_URL}/summary`,
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body: JSON.stringify({
+            video_id:
+              currentVideoId,
+
+            style:
+              style
+          })
+        }
+      );
+
 
     if (!response.ok) {
+
+      let errorMessage =
+        `Server error: ${response.status}`;
+
+
+      try {
+
+        const errorData =
+          await response.json();
+
+
+        if (errorData.detail) {
+
+          errorMessage =
+            typeof errorData.detail === "string"
+              ? errorData.detail
+              : JSON.stringify(
+                  errorData.detail
+                );
+        }
+
+      } catch (_) {
+        // Response wasn't JSON
+      }
+
+
       throw new Error(
-        `Server error: ${response.status}`
+        errorMessage
       );
     }
 
-    const data = await response.json();
+
+    const data =
+      await response.json();
+
+
+    const summaryText =
+      data.summary ||
+      data.answer ||
+      data.result ||
+      "";
+
+
+    if (!summaryText) {
+
+      throw new Error(
+        "The server returned an empty summary."
+      );
+    }
+
 
     summaryContainer.innerHTML = `
       <div class="summary-result">
+
         <div class="summary-result-header">
-          <span>Summary</span>
+
+          <span>
+            Summary
+          </span>
 
           <button
             class="copy-summary-btn"
@@ -673,50 +1112,78 @@ async function generateSummary(style) {
           >
             ⧉ Copy
           </button>
+
         </div>
 
         <div class="summary-text">
-          ${formatAnswer(
-            data.summary || data.answer || ""
-          )}
+          ${formatAnswer(summaryText)}
         </div>
+
       </div>
     `;
+
 
     const copyButton =
       summaryContainer.querySelector(
         ".copy-summary-btn"
       );
 
-    const summaryText =
-      data.summary || data.answer || "";
 
-    copyButton.addEventListener(
-      "click",
-      async () => {
-        try {
-          await navigator.clipboard.writeText(
-            summaryText
-          );
+    if (copyButton) {
 
-          copyButton.textContent = "✓ Copied";
+      copyButton.addEventListener(
+        "click",
+        async () => {
 
-          setTimeout(() => {
-            copyButton.textContent = "⧉ Copy";
-          }, 1500);
+          try {
 
-        } catch (error) {
-          console.error(error);
+            await navigator.clipboard.writeText(
+              summaryText
+            );
+
+
+            copyButton.textContent =
+              "✓ Copied";
+
+
+            setTimeout(() => {
+
+              copyButton.textContent =
+                "⧉ Copy";
+
+            }, 1500);
+
+
+          } catch (error) {
+
+            console.error(
+              "Summary copy failed:",
+              error
+            );
+          }
         }
-      }
-    );
+      );
+    }
+
 
   } catch (error) {
-    console.error("Summary error:", error);
+
+    console.error(
+      "Summary error:",
+      error
+    );
+
 
     summaryContainer.innerHTML = `
       <div class="summary-error">
         Could not generate summary.
+        <br>
+        <small>
+          ${escapeHtml(
+            error.message ||
+              "Something went wrong."
+          )}
+        </small>
       </div>
     `;
   }
@@ -728,9 +1195,12 @@ async function generateSummary(style) {
 // =========================================
 
 function scrollChatToBottom() {
+
   requestAnimationFrame(() => {
+
     conversationContainer.scrollTop =
       conversationContainer.scrollHeight;
+
   });
 }
 
@@ -740,17 +1210,28 @@ function scrollChatToBottom() {
 // =========================================
 
 function resetChat() {
-  videoLoaded = false;
+
+  videoLoaded =
+    false;
+
 
   conversationContainer.innerHTML = `
-    <div id="emptyChat" class="empty-chat">
+    <div
+      id="emptyChat"
+      class="empty-chat"
+    >
 
-      <div class="empty-icon">✦</div>
+      <div class="empty-icon">
+        ✦
+      </div>
 
-      <h3>Ask about this video</h3>
+      <h3>
+        Ask about this video
+      </h3>
 
       <p>
-        Get answers directly from the video's transcript.
+        Get answers directly from
+        the video's transcript.
       </p>
 
       <div class="suggestion-list">
@@ -781,12 +1262,21 @@ function resetChat() {
     </div>
   `;
 
-  questionInput.value = "";
 
-  summaryContainer.innerHTML = "";
+  questionInput.value =
+    "";
 
-  questionInput.disabled = true;
-  askBtn.disabled = true;
+
+  summaryContainer.innerHTML =
+    "";
+
+
+  questionInput.disabled =
+    true;
+
+  askBtn.disabled =
+    true;
+
 
   attachSuggestionListeners();
 }
@@ -797,26 +1287,39 @@ function resetChat() {
 // =========================================
 
 function attachSuggestionListeners() {
+
   const buttons =
     document.querySelectorAll(
       ".suggestion-btn"
     );
 
-  buttons.forEach((button) => {
-    button.addEventListener(
-      "click",
-      () => {
-        const question =
-          button.dataset.question;
 
-        questionInput.value = question;
+  buttons.forEach(
+    (button) => {
 
-        if (videoLoaded) {
-          askQuestion(question);
+      button.addEventListener(
+        "click",
+        () => {
+
+          const question =
+            button.dataset.question;
+
+
+          questionInput.value =
+            question;
+
+
+          if (videoLoaded) {
+
+            askQuestion(
+              question
+            );
+          }
         }
-      }
-    );
-  });
+      );
+
+    }
+  );
 }
 
 
@@ -824,54 +1327,73 @@ function attachSuggestionListeners() {
 // EVENT LISTENERS
 // =========================================
 
-loadVideoBtn.addEventListener(
-  "click",
-  loadCurrentVideo
-);
+if (loadVideoBtn) {
+
+  loadVideoBtn.addEventListener(
+    "click",
+    loadCurrentVideo
+  );
+}
 
 
-askBtn.addEventListener(
-  "click",
-  () => {
-    askQuestion(questionInput.value);
-  }
-);
+if (askBtn) {
 
+  askBtn.addEventListener(
+    "click",
+    () => {
 
-questionInput.addEventListener(
-  "keydown",
-  (event) => {
+      askQuestion(
+        questionInput.value
+      );
 
-    if (
-      event.key === "Enter" &&
-      !event.shiftKey
-    ) {
-      event.preventDefault();
-
-      askQuestion(questionInput.value);
     }
+  );
+}
 
-  }
-);
+
+if (questionInput) {
+
+  questionInput.addEventListener(
+    "keydown",
+    (event) => {
+
+      if (
+        event.key === "Enter" &&
+        !event.shiftKey
+      ) {
+
+        event.preventDefault();
+
+        askQuestion(
+          questionInput.value
+        );
+      }
+
+    }
+  );
+}
 
 
 document
   .querySelectorAll(".summary-btn")
-  .forEach((button) => {
+  .forEach(
+    (button) => {
 
-    button.addEventListener(
-      "click",
-      () => {
+      button.addEventListener(
+        "click",
+        () => {
 
-        const style =
-          button.dataset.style;
+          const style =
+            button.dataset.style;
 
-        generateSummary(style);
+          generateSummary(
+            style
+          );
+        }
+      );
 
-      }
-    );
-
-  });
+    }
+  );
 
 
 // =========================================
@@ -879,18 +1401,34 @@ document
 // =========================================
 
 async function initialize() {
-  questionInput.disabled = true;
-  askBtn.disabled = true;
+
+  questionInput.disabled =
+    true;
+
+  askBtn.disabled =
+    true;
+
 
   const video =
     await getCurrentVideo();
 
+
   if (!video) {
-    updateVideoUI(null);
+
+    updateVideoUI(
+      null
+    );
+
+    resetChat();
+
     return;
   }
 
-  updateVideoUI(video);
+
+  updateVideoUI(
+    video
+  );
+
 
   resetChat();
 }
@@ -903,25 +1441,35 @@ initialize();
 // DETECT VIDEO CHANGES
 // =========================================
 
-setInterval(async () => {
+setInterval(
+  async () => {
 
-  const video =
-    await getCurrentVideo();
+    const video =
+      await getCurrentVideo();
 
-  if (!video) return;
 
-  if (
-    currentVideoId &&
-    video.id !== currentVideoId
-  ) {
+    if (!video) {
+      return;
+    }
 
-    updateVideoUI(video);
 
-    resetChat();
+    if (
+      currentVideoId &&
+      video.id !== currentVideoId
+    ) {
 
-    statusElement.textContent =
-      "New video detected. Analyze it to continue.";
+      updateVideoUI(
+        video
+      );
 
-  }
 
-}, 2000);
+      resetChat();
+
+
+      statusElement.textContent =
+        "New video detected. Analyze it to continue.";
+    }
+
+  },
+  2000
+);
