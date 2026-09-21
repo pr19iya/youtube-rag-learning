@@ -14,6 +14,8 @@ from rank_bm25 import BM25Okapi
 from pathlib import Path
 
 load_dotenv()
+
+
 # --------------------------------------------------
 # Configuration
 # --------------------------------------------------
@@ -36,6 +38,7 @@ def format_timestamp(seconds):
     """Convert seconds into MM:SS format."""
 
     total_seconds = int(seconds)
+
     minutes = total_seconds // 60
     remaining_seconds = total_seconds % 60
 
@@ -51,7 +54,7 @@ def create_chunks(
     target_characters=1000,
     overlap_snippets=1,
 ):
-    """Combine caption snippets into overlapping chunks."""
+    """Combine transcript snippets into overlapping chunks."""
 
     chunks = []
 
@@ -60,29 +63,55 @@ def create_chunks(
 
     for snippet in transcript:
 
-        # Add the current transcript snippet
-        current_snippets.append(snippet)
-        current_size += len(snippet.text) + 1
+        # Support both:
+        # 1. youtube-transcript-api objects
+        # 2. dictionaries received from browser
 
-        # Check whether the chunk is large enough
+        if isinstance(snippet, dict):
+
+            text = snippet.get("text", "")
+            start = float(snippet.get("start", 0))
+            duration = float(
+                snippet.get("duration", 0)
+            )
+
+        else:
+
+            text = snippet.text
+            start = float(snippet.start)
+            duration = float(snippet.duration)
+
+        # Convert into a consistent dictionary
+        normalized_snippet = {
+            "text": text,
+            "start": start,
+            "duration": duration,
+        }
+
+        current_snippets.append(
+            normalized_snippet
+        )
+
+        current_size += len(text) + 1
+
+        # ------------------------------------------
+        # Create chunk
+        # ------------------------------------------
+
         if current_size >= target_characters:
 
-            # --------------------------------------
-            # Create the chunk
-            # --------------------------------------
-
-            chunk_start = current_snippets[0].start
+            chunk_start = current_snippets[0]["start"]
 
             last_snippet = current_snippets[-1]
 
             chunk_end = (
-                last_snippet.start
-                + last_snippet.duration
+                last_snippet["start"]
+                + last_snippet["duration"]
             )
 
             chunk_text = " ".join(
-                snippet.text
-                for snippet in current_snippets
+                item["text"]
+                for item in current_snippets
             )
 
             chunks.append(
@@ -94,37 +123,74 @@ def create_chunks(
             )
 
             # --------------------------------------
-            # Keep the last few snippets
+            # Keep overlap
             # --------------------------------------
-            
-            current_snippets = current_snippets[
-                -overlap_snippets:
-            ]
 
-            # Recalculate the size because the
-            # next chunk starts with the overlap.
+            if overlap_snippets > 0:
+
+                current_snippets = (
+                    current_snippets[
+                        -overlap_snippets:
+                    ]
+                )
+
+            else:
+
+                current_snippets = []
+
             current_size = sum(
-                len(snippet.text) + 1
-                for snippet in current_snippets
+                len(item["text"]) + 1
+                for item in current_snippets
             )
 
+    # ------------------------------------------
+    # Remaining transcript
+    # ------------------------------------------
+
+    if current_snippets:
+
+        chunk_start = current_snippets[0]["start"]
+
+        last_snippet = current_snippets[-1]
+
+        chunk_end = (
+            last_snippet["start"]
+            + last_snippet["duration"]
+        )
+
+        chunk_text = " ".join(
+            item["text"]
+            for item in current_snippets
+        )
+
+        chunks.append(
+            {
+                "text": chunk_text,
+                "start": chunk_start,
+                "end": chunk_end,
+            }
+        )
+
+    return chunks
     # ------------------------------------------
     # Save remaining transcript
     # ------------------------------------------
 
     if current_snippets:
 
-        chunk_start = current_snippets[0].start
+        chunk_start = (
+            current_snippets[0]["start"]
+        )
 
         last_snippet = current_snippets[-1]
 
         chunk_end = (
-            last_snippet.start
-            + last_snippet.duration
+            last_snippet["start"]
+            + last_snippet["duration"]
         )
 
         chunk_text = " ".join(
-            snippet.text
+            snippet["text"]
             for snippet in current_snippets
         )
 
@@ -137,6 +203,8 @@ def create_chunks(
         )
 
     return chunks
+
+
 # --------------------------------------------------
 # Cache paths
 # --------------------------------------------------
@@ -159,7 +227,11 @@ def get_cache_paths(video_id):
 # Save video data
 # --------------------------------------------------
 
-def save_video_data(video_id, chunks, faiss_index):
+def save_video_data(
+    video_id,
+    chunks,
+    faiss_index,
+):
     """Save FAISS vectors and transcript metadata."""
 
     index_path, metadata_path = get_cache_paths(
@@ -181,6 +253,7 @@ def save_video_data(video_id, chunks, faiss_index):
         "w",
         encoding="utf-8",
     ) as file:
+
         json.dump(
             metadata,
             file,
@@ -211,6 +284,7 @@ def load_video_data(video_id):
         return None, None
 
     try:
+
         faiss_index = faiss.read_index(
             str(index_path)
         )
@@ -219,6 +293,7 @@ def load_video_data(video_id):
             "r",
             encoding="utf-8",
         ) as file:
+
             metadata = json.load(file)
 
         saved_model = metadata.get(
@@ -226,108 +301,105 @@ def load_video_data(video_id):
         )
 
         if saved_model != EMBEDDING_MODEL_NAME:
+
             print(
                 "Embedding model changed. "
                 "Rebuilding the index."
             )
+
             return None, None
 
-        chunks = metadata.get("chunks", [])
+        chunks = metadata.get(
+            "chunks",
+            [],
+        )
 
         if faiss_index.ntotal != len(chunks):
+
             print(
-                "Saved index and metadata do not match. "
-                "Rebuilding the index."
+                "Saved index and metadata do not "
+                "match. Rebuilding the index."
             )
+
             return None, None
 
         return chunks, faiss_index
 
     except Exception as error:
-        print("Could not load saved data:", error)
-        print("The video will be processed again.")
 
-        return None, None
-
-
-# --------------------------------------------------
-# Process a new video
-# --------------------------------------------------
-
-def process_video(video_id, embedding_model):
-    """Download transcript and create FAISS index."""
-
-    print("\nDownloading the transcript...")
-
-    try:
-        api = YouTubeTranscriptApi()
-
-        transcript = api.fetch(
-            video_id,
-            languages=["en", "hi"],
+        print(
+            "Could not load saved data:",
+            error,
         )
 
+        print(
+            "The video will be processed again."
+        )
+
+        return None, None
+
+
+# --------------------------------------------------
+# Process a video transcript
+# --------------------------------------------------
+
+def process_video(video_id, embedding_model, transcript):
+    print("\nProcessing transcript received from browser...")
+
+    if not transcript:
+        print("No transcript was provided.")
+        return None, None
+
+    try:
+        chunks = create_chunks(
+            transcript,
+            target_characters=1000,
+            overlap_snippets=1,
+        )
+
+        if not chunks:
+            print("Transcript produced no chunks.")
+            return None, None
+
+        print(f"Created {len(chunks)} transcript chunks.")
+
+        texts = [chunk["text"] for chunk in chunks]
+
+        print("Generating embeddings...")
+
+        chunk_embeddings = embedding_model.encode(
+            texts,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )
+
+        chunk_embeddings = np.asarray(
+            chunk_embeddings,
+            dtype="float32",
+        )
+
+        dimension = chunk_embeddings.shape[1]
+
+        faiss_index = faiss.IndexFlatIP(dimension)
+        faiss_index.add(chunk_embeddings)
+
+        print("Embedding dimension:", dimension)
+        print("Vectors stored:", faiss_index.ntotal)
+
+        save_video_data(
+            video_id,
+            chunks,
+            faiss_index,
+        )
+
+        print("Video data saved successfully.")
+
+        return chunks, faiss_index
+
     except Exception as error:
-        print("\nCould not retrieve the transcript.")
+        print("\nCould not process transcript.")
         print("Reason:", error)
-
-        return None, None
-
-    chunks = create_chunks(
-        transcript,
-        target_characters=1000,
-    )
-
-    if not chunks:
-        print("The transcript contains no usable text.")
-        return None, None
-
-    print(f"Created {len(chunks)} transcript chunks.")
-
-    chunk_texts = [
-        chunk["text"]
-        for chunk in chunks
-    ]
-
-    print("Creating chunk embeddings...")
-
-    chunk_embeddings = embedding_model.encode(
-        chunk_texts,
-        normalize_embeddings=True,
-        show_progress_bar=True,
-    )
-
-    chunk_embeddings = np.asarray(
-        chunk_embeddings,
-        dtype="float32",
-    )
-
-    embedding_dimension = (
-        chunk_embeddings.shape[1]
-    )
-
-    faiss_index = faiss.IndexFlatIP(
-        embedding_dimension
-    )
-
-    faiss_index.add(chunk_embeddings)
-
-    print("Embedding dimension:", embedding_dimension)
-    print("Vectors stored:", faiss_index.ntotal)
-
-    save_video_data(
-        video_id,
-        chunks,
-        faiss_index,
-    )
-
-    return chunks, faiss_index
-
-
-
-# --------------------------------------------------
-# Semantic retrieval
-# --------------------------------------------------
+        raise
 
 def retrieve_relevant_chunks(
     question,
@@ -341,9 +413,11 @@ def retrieve_relevant_chunks(
     if faiss_index.ntotal == 0:
         return []
 
-    question_embedding = embedding_model.encode(
-        [question],
-        normalize_embeddings=True,
+    question_embedding = (
+        embedding_model.encode(
+            [question],
+            normalize_embeddings=True,
+        )
     )
 
     question_embedding = np.asarray(
@@ -367,6 +441,7 @@ def retrieve_relevant_chunks(
         indices[0],
         scores[0],
     ):
+
         if index == -1:
             continue
 
@@ -381,6 +456,7 @@ def retrieve_relevant_chunks(
 
     return results
 
+
 # --------------------------------------------------
 # BM25 keyword retrieval
 # --------------------------------------------------
@@ -390,7 +466,7 @@ def retrieve_bm25_chunks(
     chunks,
     top_k=8,
 ):
-    """Retrieve transcript chunks using BM25 keyword search."""
+    """Retrieve transcript chunks using BM25."""
 
     if not chunks:
         return []
@@ -404,7 +480,9 @@ def retrieve_bm25_chunks(
         tokenized_chunks
     )
 
-    question_tokens = question.lower().split()
+    question_tokens = (
+        question.lower().split()
+    )
 
     scores = bm25.get_scores(
         question_tokens
@@ -439,10 +517,6 @@ def retrieve_bm25_chunks(
 # Hybrid retrieval
 # --------------------------------------------------
 
-# --------------------------------------------------
-# Hybrid retrieval with normalized scores
-# --------------------------------------------------
-
 def hybrid_retrieval(
     question,
     embedding_model,
@@ -450,20 +524,24 @@ def hybrid_retrieval(
     chunks,
     top_k=8,
 ):
-    """Combine FAISS semantic search with BM25 keyword search."""
+    """Combine FAISS semantic and BM25 search."""
 
-    faiss_results = retrieve_relevant_chunks(
-        question=question,
-        embedding_model=embedding_model,
-        faiss_index=faiss_index,
-        chunks=chunks,
-        top_k=top_k,
+    faiss_results = (
+        retrieve_relevant_chunks(
+            question=question,
+            embedding_model=embedding_model,
+            faiss_index=faiss_index,
+            chunks=chunks,
+            top_k=top_k,
+        )
     )
 
-    bm25_results = retrieve_bm25_chunks(
-        question=question,
-        chunks=chunks,
-        top_k=top_k,
+    bm25_results = (
+        retrieve_bm25_chunks(
+            question=question,
+            chunks=chunks,
+            top_k=top_k,
+        )
     )
 
     combined = {}
@@ -510,6 +588,9 @@ def hybrid_retrieval(
         combined.values()
     )
 
+    if not combined_results:
+        return []
+
     # ----------------------------------------------
     # Normalize FAISS scores
     # ----------------------------------------------
@@ -530,23 +611,29 @@ def hybrid_retrieval(
         )
 
         if faiss_max == faiss_min:
+
             normalized_faiss = 0.0
+
         else:
+
             normalized_faiss = (
                 (score - faiss_min)
                 / (faiss_max - faiss_min)
             )
 
-        chunk["normalized_faiss_score"] = (
-            normalized_faiss
-        )
+        chunk[
+            "normalized_faiss_score"
+        ] = normalized_faiss
 
     # ----------------------------------------------
     # Normalize BM25 scores
     # ----------------------------------------------
 
     bm25_scores = [
-        chunk.get("bm25_score", 0.0)
+        chunk.get(
+            "bm25_score",
+            0.0,
+        )
         for chunk in combined_results
     ]
 
@@ -561,16 +648,19 @@ def hybrid_retrieval(
         )
 
         if bm25_max == bm25_min:
+
             normalized_bm25 = 0.0
+
         else:
+
             normalized_bm25 = (
                 (score - bm25_min)
                 / (bm25_max - bm25_min)
             )
 
-        chunk["normalized_bm25_score"] = (
-            normalized_bm25
-        )
+        chunk[
+            "normalized_bm25_score"
+        ] = normalized_bm25
 
     # ----------------------------------------------
     # Calculate hybrid score
@@ -583,35 +673,38 @@ def hybrid_retrieval(
 
         chunk["hybrid_score"] = (
             FAISS_WEIGHT
-            * chunk["normalized_faiss_score"]
+            * chunk[
+                "normalized_faiss_score"
+            ]
             +
             BM25_WEIGHT
-            * chunk["normalized_bm25_score"]
+            * chunk[
+                "normalized_bm25_score"
+            ]
         )
 
     # ----------------------------------------------
-    # Sort by hybrid score
+    # Sort
     # ----------------------------------------------
 
     combined_results.sort(
-        key=lambda chunk: chunk["hybrid_score"],
+        key=lambda chunk:
+        chunk["hybrid_score"],
         reverse=True,
     )
 
-    # ----------------------------------------------
-    # Keep top candidates
-    # ----------------------------------------------
+    combined_results = (
+        combined_results[:top_k]
+    )
 
-    combined_results = combined_results[
-        :top_k
-    ]
-
-    print("\nHybrid retrieval candidates:")
+    print(
+        "\nHybrid retrieval candidates:"
+    )
 
     for chunk in combined_results:
 
         print(
-            f"FAISS={chunk['score']:.3f} | "
+            f"FAISS={chunk.get('score', 0.0):.3f} | "
             f"BM25={chunk['bm25_score']:.3f} | "
             f"Hybrid={chunk['hybrid_score']:.3f} | "
             f"{chunk['text'][:100]}"
@@ -619,13 +712,18 @@ def hybrid_retrieval(
 
     return combined_results
 
+
+# --------------------------------------------------
+# CrossEncoder reranking
+# --------------------------------------------------
+
 def rerank_chunks(
     question,
     retrieved_chunks,
     reranker_model,
     top_k=3,
 ):
-    """Rerank retrieved chunks using a cross-encoder."""
+    """Rerank retrieved chunks using CrossEncoder."""
 
     if not retrieved_chunks:
         return []
@@ -633,6 +731,7 @@ def rerank_chunks(
     pairs = []
 
     for chunk in retrieved_chunks:
+
         pairs.append(
             [
                 question,
@@ -640,7 +739,9 @@ def rerank_chunks(
             ]
         )
 
-    scores = reranker_model.predict(pairs)
+    scores = reranker_model.predict(
+        pairs
+    )
 
     reranked_chunks = []
 
@@ -648,22 +749,26 @@ def rerank_chunks(
         retrieved_chunks,
         scores,
     ):
+
         reranked_chunk = chunk.copy()
 
-        reranked_chunk["rerank_score"] = float(
-            score
-        )
+        reranked_chunk[
+            "rerank_score"
+        ] = float(score)
 
         reranked_chunks.append(
             reranked_chunk
         )
 
     reranked_chunks.sort(
-        key=lambda chunk: chunk["rerank_score"],
+        key=lambda chunk:
+        chunk["rerank_score"],
         reverse=True,
     )
 
     return reranked_chunks[:top_k]
+
+
 # --------------------------------------------------
 # Context expansion
 # --------------------------------------------------
@@ -673,7 +778,7 @@ def expand_retrieved_chunks(
     chunks,
     neighbor_count=1,
 ):
-    """Add neighboring transcript chunks for more context."""
+    """Add neighboring transcript chunks."""
 
     if not reranked_chunks:
         return []
@@ -683,23 +788,27 @@ def expand_retrieved_chunks(
 
     for chunk in reranked_chunks:
 
-        # Find the original chunk index
         chunk_index = None
 
-        for index, original_chunk in enumerate(chunks):
+        for index, original_chunk in enumerate(
+            chunks
+        ):
 
             if (
-                original_chunk["start"] == chunk["start"]
-                and original_chunk["end"] == chunk["end"]
-                and original_chunk["text"] == chunk["text"]
+                original_chunk["start"]
+                == chunk["start"]
+                and original_chunk["end"]
+                == chunk["end"]
+                and original_chunk["text"]
+                == chunk["text"]
             ):
+
                 chunk_index = index
                 break
 
         if chunk_index is None:
             continue
 
-        # Include the previous and next chunks
         start_index = max(
             0,
             chunk_index - neighbor_count,
@@ -707,7 +816,9 @@ def expand_retrieved_chunks(
 
         end_index = min(
             len(chunks),
-            chunk_index + neighbor_count + 1,
+            chunk_index
+            + neighbor_count
+            + 1,
         )
 
         for index in range(
@@ -718,25 +829,29 @@ def expand_retrieved_chunks(
             if index in seen_indices:
                 continue
 
-            expanded_chunk = chunks[index].copy()
+            expanded_chunk = (
+                chunks[index].copy()
+            )
 
-            # Keep scores for the originally
-            # retrieved/reranked chunk.
             if index == chunk_index:
 
                 expanded_chunk["score"] = (
-                    chunk["score"]
+                    chunk.get("score")
                 )
 
-                expanded_chunk["rerank_score"] = (
-                    chunk["rerank_score"]
+                expanded_chunk[
+                    "rerank_score"
+                ] = chunk.get(
+                    "rerank_score"
                 )
 
             else:
 
                 expanded_chunk["score"] = None
 
-                expanded_chunk["rerank_score"] = None
+                expanded_chunk[
+                    "rerank_score"
+                ] = None
 
             expanded_chunks.append(
                 expanded_chunk
@@ -745,6 +860,8 @@ def expand_retrieved_chunks(
             seen_indices.add(index)
 
     return expanded_chunks
+
+
 # --------------------------------------------------
 # Conversation memory
 # --------------------------------------------------
@@ -754,20 +871,26 @@ def format_conversation_history(
     maximum_turns=3,
     maximum_answer_characters=1500,
 ):
-    """Format the most recent conversation turns."""
+    """Format recent conversation turns."""
 
-    recent_history = conversation_history[
-        -maximum_turns:
-    ]
+    recent_history = (
+        conversation_history[
+            -maximum_turns:
+        ]
+    )
 
     history_parts = []
 
     for turn in recent_history:
+
         answer = turn["answer"]
 
         if len(answer) > maximum_answer_characters:
+
             answer = (
-                answer[:maximum_answer_characters]
+                answer[
+                    :maximum_answer_characters
+                ]
                 + "..."
             )
 
@@ -776,7 +899,9 @@ def format_conversation_history(
             f"Assistant: {answer}"
         )
 
-    return "\n\n".join(history_parts)
+    return "\n\n".join(
+        history_parts
+    )
 
 
 # --------------------------------------------------
@@ -788,35 +913,40 @@ def rewrite_question(
     conversation_history,
     chat_model,
 ):
-    """Rewrite a follow-up as a standalone question."""
+    """Rewrite a follow-up as standalone question."""
 
     if not conversation_history:
         return question
 
-    history_text = format_conversation_history(
-        conversation_history
+    history_text = (
+        format_conversation_history(
+            conversation_history
+        )
     )
 
     messages = [
         SystemMessage(
             content=(
-                "You rewrite user questions for a YouTube "
-        "transcript retrieval system. "
+                "You rewrite user questions for a "
+                "YouTube transcript retrieval system. "
 
-        "If the latest question is already a complete "
-        "standalone question, return it unchanged. "
+                "If the latest question is already a "
+                "complete standalone question, return "
+                "it unchanged. "
 
-        "If the latest question is a follow-up, use the "
-        "conversation history to resolve references such "
-        "as 'it', 'they', 'this', 'that', 'he', 'she', "
-        "'they', or phrases such as 'explain more'. "
+                "If the latest question is a follow-up, "
+                "use the conversation history to resolve "
+                "references such as 'it', 'they', 'this', "
+                "'that', 'he', 'she', or phrases such as "
+                "'explain more'. "
 
-        "Preserve the original meaning of the user's "
-        "question. Do not add new information. "
+                "Preserve the original meaning of the "
+                "user's question. Do not add new "
+                "information. "
 
-        "Do not answer the question. "
+                "Do not answer the question. "
 
-        "Return ONLY the final standalone question."
+                "Return ONLY the final standalone question."
             )
         ),
         HumanMessage(
@@ -834,9 +964,13 @@ Standalone question:
         ),
     ]
 
-    response = chat_model.invoke(messages)
+    response = chat_model.invoke(
+        messages
+    )
 
-    rewritten_question = response.content.strip()
+    rewritten_question = (
+        response.content.strip()
+    )
 
     if not rewritten_question:
         return question
@@ -854,7 +988,7 @@ def generate_answer(
     chat_model,
     conversation_history,
 ):
-    """Generate an answer from transcript evidence."""
+    """Generate answer from transcript evidence."""
 
     context_parts = []
 
@@ -862,6 +996,7 @@ def generate_answer(
         retrieved_chunks,
         start=1,
     ):
+
         start_time = format_timestamp(
             chunk["start"]
         )
@@ -876,45 +1011,56 @@ def generate_answer(
             f"{chunk['text']}"
         )
 
-    context = "\n\n".join(context_parts)
+    context = "\n\n".join(
+        context_parts
+    )
 
-    history_text = format_conversation_history(
-        conversation_history
+    history_text = (
+        format_conversation_history(
+            conversation_history
+        )
     )
 
     if not history_text:
-        history_text = "No previous conversation."
+        history_text = (
+            "No previous conversation."
+        )
 
     messages = [
         SystemMessage(
             content=(
-                        "You are a grounded YouTube video assistant. "
+                "You are a grounded YouTube video "
+                "assistant. "
 
-        "Your answer must be based ONLY on the retrieved "
-        "transcript sections provided below. "
+                "Your answer must be based ONLY on "
+                "the retrieved transcript sections "
+                "provided below. "
 
-        "Use the conversation history only to understand "
-        "references such as 'it', 'this', 'that', or "
-        "'the previous point'. Do not use conversation "
-        "history as factual evidence. "
+                "Use the conversation history only "
+                "to understand references such as "
+                "'it', 'this', 'that', or 'the previous "
+                "point'. Do not use conversation history "
+                "as factual evidence. "
 
-        "Do not use your own outside knowledge. "
-        "Do not guess or fill in missing information. "
+                "Do not use your own outside knowledge. "
+                "Do not guess or fill in missing "
+                "information. "
 
-        "If the retrieved transcript does not contain "
-        "enough information to answer the question, "
-        "respond exactly with: "
-        "'This information was not found in the video.' "
+                "If the retrieved transcript does not "
+                "contain enough information to answer "
+                "the question, respond exactly with: "
+                "'This information was not found in "
+                "the video.' "
 
-        "When answering, cite the relevant transcript "
-        "section using [Source 1], [Source 2], or [Source 3]. "
+                "When answering, cite the relevant "
+                "transcript section using [Source 1], "
+                "[Source 2], or [Source 3]. "
 
-        "If multiple sources support the answer, cite all "
-        "relevant sources. "
+                "If multiple sources support the answer, "
+                "cite all relevant sources. "
 
-        "Keep the answer clear and directly answer the "
-        "user's question."
-
+                "Keep the answer clear and directly "
+                "answer the user's question."
             )
         ),
         HumanMessage(
@@ -936,9 +1082,12 @@ Answer using only the transcript evidence.
         ),
     ]
 
-    response = chat_model.invoke(messages)
+    response = chat_model.invoke(
+        messages
+    )
 
     return response.content.strip()
+
 
 # --------------------------------------------------
 # Answer evaluation
@@ -950,13 +1099,16 @@ def evaluate_answer(
     retrieved_chunks,
     chat_model,
 ):
-    """Evaluate whether an answer is supported by retrieved evidence."""
+    """Evaluate whether answer is supported."""
 
     if not retrieved_chunks:
+
         return {
             "grounded": False,
             "relevant": False,
-            "reason": "No evidence was retrieved.",
+            "reason": (
+                "No evidence was retrieved."
+            ),
         }
 
     context = "\n\n".join(
@@ -967,17 +1119,18 @@ def evaluate_answer(
     messages = [
         SystemMessage(
             content=(
-                "You are evaluating an answer generated "
-                "by a YouTube RAG system. "
+                "You are evaluating an answer "
+                "generated by a YouTube RAG system. "
 
-                "Evaluate the answer ONLY against the "
-                "provided transcript evidence. "
+                "Evaluate the answer ONLY against "
+                "the provided transcript evidence. "
 
                 "Do not use outside knowledge. "
 
-                "Determine whether the answer is supported "
-                "by the evidence and whether it directly "
-                "addresses the question. "
+                "Determine whether the answer is "
+                "supported by the evidence and "
+                "whether it directly addresses "
+                "the question. "
 
                 "Return ONLY valid JSON in this format: "
 
@@ -1016,6 +1169,7 @@ Evaluation:
     )
 
     try:
+
         evaluation = json.loads(
             evaluation_text
         )
@@ -1032,12 +1186,17 @@ Evaluation:
         }
 
     return evaluation
+
+
 # --------------------------------------------------
 # Intermediate summarization
 # --------------------------------------------------
 
-def summarize_text_group(text, chat_model):
-    """Create an intermediate transcript summary."""
+def summarize_text_group(
+    text,
+    chat_model,
+):
+    """Create intermediate transcript summary."""
 
     messages = [
         SystemMessage(
@@ -1046,8 +1205,8 @@ def summarize_text_group(text, chat_model):
                 "Preserve important facts, explanations, "
                 "examples and conclusions. Use only the "
                 "supplied content. Do not add outside "
-                "information. Keep the result compact while "
-                "retaining the essential ideas."
+                "information. Keep the result compact "
+                "while retaining the essential ideas."
             )
         ),
         HumanMessage(
@@ -1061,7 +1220,9 @@ Create a compact intermediate summary.
         ),
     ]
 
-    response = chat_model.invoke(messages)
+    response = chat_model.invoke(
+        messages
+    )
 
     return response.content.strip()
 
@@ -1075,21 +1236,25 @@ def create_final_summary(
     chat_model,
     summary_style,
 ):
-    """Create the final video summary."""
+    """Create final video summary."""
 
     style_instructions = {
+
         "short": (
-            "Write one concise paragraph of approximately "
-            "100 to 150 words."
+            "Write one concise paragraph of "
+            "approximately 100 to 150 words."
         ),
+
         "detailed": (
-            "Write a detailed structured summary with headings "
-            "for the main topic, key explanations, examples and "
-            "conclusion."
+            "Write a detailed structured summary "
+            "with headings for the main topic, key "
+            "explanations, examples and conclusion."
         ),
+
         "points": (
-            "Write 6 to 10 clear bullet points containing "
-            "the video's most important ideas."
+            "Write 6 to 10 clear bullet points "
+            "containing the video's most important "
+            "ideas."
         ),
     }
 
@@ -1101,8 +1266,9 @@ def create_final_summary(
     messages = [
         SystemMessage(
             content=(
-                "Create an accurate final summary of a YouTube "
-                "video using only the supplied partial summaries. "
+                "Create an accurate final summary "
+                "of a YouTube video using only the "
+                "supplied partial summaries. "
                 "Do not add facts that are not present."
             )
         ),
@@ -1121,7 +1287,9 @@ Final summary:
         ),
     ]
 
-    response = chat_model.invoke(messages)
+    response = chat_model.invoke(
+        messages
+    )
 
     return response.content.strip()
 
@@ -1136,30 +1304,40 @@ def generate_video_summary(
     summary_style="short",
     batch_size=4,
 ):
-    """Summarize the complete transcript."""
+    """Summarize complete transcript."""
 
     if not chunks:
-        return "No transcript content is available."
+
+        return (
+            "No transcript content is available."
+        )
 
     partial_summaries = []
 
     total_batches = (
-        len(chunks) + batch_size - 1
+        len(chunks)
+        + batch_size
+        - 1
     ) // batch_size
 
     print(
         f"\nCreating {total_batches} "
-        f"partial summaries..."
+        "partial summaries..."
     )
 
-    # Map stage: summarize transcript groups.
+    # ------------------------------------------
+    # Map stage
+    # ------------------------------------------
+
     for start_index in range(
         0,
         len(chunks),
         batch_size,
     ):
+
         batch = chunks[
-            start_index:start_index + batch_size
+            start_index:
+            start_index + batch_size
         ]
 
         batch_text = "\n\n".join(
@@ -1173,20 +1351,27 @@ def generate_video_summary(
 
         print(
             f"Summarizing part "
-            f"{batch_number}/{total_batches}..."
+            f"{batch_number}/"
+            f"{total_batches}..."
         )
 
-        partial_summary = summarize_text_group(
-            batch_text,
-            chat_model,
+        partial_summary = (
+            summarize_text_group(
+                batch_text,
+                chat_model,
+            )
         )
 
         partial_summaries.append(
             partial_summary
         )
 
-    # Reduce stage for long videos.
+    # ------------------------------------------
+    # Reduce stage
+    # ------------------------------------------
+
     while len(partial_summaries) > batch_size:
+
         print(
             "Combining intermediate summaries..."
         )
@@ -1198,30 +1383,40 @@ def generate_video_summary(
             len(partial_summaries),
             batch_size,
         ):
-            summary_group = partial_summaries[
-                start_index:start_index + batch_size
-            ]
+
+            summary_group = (
+                partial_summaries[
+                    start_index:
+                    start_index + batch_size
+                ]
+            )
 
             combined_group = "\n\n".join(
                 summary_group
             )
 
-            reduced_summary = summarize_text_group(
-                combined_group,
-                chat_model,
+            reduced_summary = (
+                summarize_text_group(
+                    combined_group,
+                    chat_model,
+                )
             )
 
             reduced_summaries.append(
                 reduced_summary
             )
 
-        partial_summaries = reduced_summaries
+        partial_summaries = (
+            reduced_summaries
+        )
 
     combined_text = "\n\n".join(
         partial_summaries
     )
 
-    print("Creating the final summary...")
+    print(
+        "Creating the final summary..."
+    )
 
     return create_final_summary(
         combined_text=combined_text,
@@ -1239,9 +1434,11 @@ def handle_summary_command(
     chunks,
     chat_model,
 ):
-    """Validate a summary command and create a summary."""
+    """Validate summary command."""
 
-    command_parts = command.lower().split()
+    command_parts = (
+        command.lower().split()
+    )
 
     summary_style = "short"
 
@@ -1255,16 +1452,32 @@ def handle_summary_command(
     ]
 
     if summary_style not in valid_styles:
-        print("\nUnknown summary style.")
-        print("Available commands:")
-        print("  /summary short")
-        print("  /summary detailed")
-        print("  /summary points")
+
+        print(
+            "\nUnknown summary style."
+        )
+
+        print(
+            "Available commands:"
+        )
+
+        print(
+            "  /summary short"
+        )
+
+        print(
+            "  /summary detailed"
+        )
+
+        print(
+            "  /summary points"
+        )
 
         return None, None
 
     print(
-        f"\nCreating a {summary_style} summary..."
+        f"\nCreating a {summary_style} "
+        "summary..."
     )
 
     summary = generate_video_summary(
@@ -1281,77 +1494,146 @@ def handle_summary_command(
 # --------------------------------------------------
 
 def main():
+
     video_id = input(
         "Enter the YouTube video ID: "
     ).strip()
 
     if not video_id:
-        print("A video ID is required.")
+
+        print(
+            "A video ID is required."
+        )
+
         return
 
-    print("\nLoading the embedding model...")
+    print(
+        "\nLoading the embedding model..."
+    )
 
     embedding_model = SentenceTransformer(
         EMBEDDING_MODEL_NAME
     )
+
     reranker_model = CrossEncoder(
-    "cross-encoder/ms-marco-MiniLM-L-6-v2"
-)
-
-    chat_model = ChatGroq(
-    model=CHAT_MODEL_NAME,
-    temperature=0,
-    api_key=os.getenv("GROQ_API_KEY"),
-)
-
-    chunks, faiss_index = load_video_data(
-        video_id
+        "cross-encoder/ms-marco-MiniLM-L-6-v2"
     )
 
-    if chunks is not None and faiss_index is not None:
-        print("\nLoaded saved video data.")
-        print("Transcript chunks:", len(chunks))
-        print("Vectors loaded:", faiss_index.ntotal)
+    chat_model = ChatGroq(
+        model=CHAT_MODEL_NAME,
+        temperature=0,
+        api_key=os.getenv(
+            "GROQ_API_KEY"
+        ),
+    )
 
-    else:
-        print("\nNo saved data was found.")
+    chunks, faiss_index = (
+        load_video_data(video_id)
+    )
 
-        chunks, faiss_index = process_video(
-            video_id,
-            embedding_model,
+    if (
+        chunks is not None
+        and faiss_index is not None
+    ):
+
+        print(
+            "\nLoaded saved video data."
         )
 
-        if chunks is None or faiss_index is None:
-            print("The video could not be processed.")
-            return
+        print(
+            "Transcript chunks:",
+            len(chunks),
+        )
 
-    print("\nThe video is ready.")
-    print("\nAvailable commands:")
-    print("  /summary short")
-    print("  /summary detailed")
-    print("  /summary points")
-    print("  quit")
-    print("\nYou can also ask any question about the video.")
+        print(
+            "Vectors loaded:",
+            faiss_index.ntotal,
+        )
+
+    else:
+
+        print(
+            "\nNo saved data was found."
+        )
+
+        print(
+            "\nThe CLI mode now requires "
+            "a transcript to be supplied."
+        )
+
+        print(
+            "Use the Chrome extension to "
+            "load a new YouTube video."
+        )
+
+        return
+
+    print(
+        "\nThe video is ready."
+    )
+
+    print(
+        "\nAvailable commands:"
+    )
+
+    print(
+        "  /summary short"
+    )
+
+    print(
+        "  /summary detailed"
+    )
+
+    print(
+        "  /summary points"
+    )
+
+    print(
+        "  quit"
+    )
+
+    print(
+        "\nYou can also ask any question "
+        "about the video."
+    )
 
     conversation_history = []
 
     while True:
-        question = input("\nYour question: ").strip()
 
-        if question.lower() in ["quit", "exit"]:
-            print("Goodbye!")
+        question = input(
+            "\nYour question: "
+        ).strip()
+
+        if question.lower() in [
+            "quit",
+            "exit",
+        ]:
+
+            print(
+                "Goodbye!"
+            )
+
             break
 
         if not question:
-            print("Please enter a question.")
+
+            print(
+                "Please enter a question."
+            )
+
             continue
 
         # ------------------------------------------
         # Summary command
         # ------------------------------------------
 
-        if question.lower().startswith("/summary"):
+        if question.lower().startswith(
+            "/summary"
+        ):
+
             try:
+
                 summary, summary_style = (
                     handle_summary_command(
                         command=question,
@@ -1361,21 +1643,34 @@ def main():
                 )
 
             except Exception as error:
-                print("\nCould not create the summary.")
-                print("Reason:", error)
+
+                print(
+                    "\nCould not create "
+                    "the summary."
+                )
+
+                print(
+                    "Reason:",
+                    error,
+                )
+
                 continue
 
             if summary is None:
                 continue
 
-            print("\nVideo summary:")
+            print(
+                "\nVideo summary:"
+            )
+
             print(summary)
 
             conversation_history.append(
                 {
                     "question": (
-                        f"Summarize the video in "
-                        f"{summary_style} format."
+                        "Summarize the video "
+                        f"in {summary_style} "
+                        "format."
                     ),
                     "answer": summary,
                 }
@@ -1392,21 +1687,32 @@ def main():
         # ------------------------------------------
 
         try:
-            standalone_question = rewrite_question(
-                question=question,
-                conversation_history=conversation_history,
-                chat_model=chat_model,
+
+            standalone_question = (
+                rewrite_question(
+                    question=question,
+                    conversation_history=(
+                        conversation_history
+                    ),
+                    chat_model=chat_model,
+                )
             )
 
         except Exception as error:
+
             print(
-                "Could not rewrite the question:",
+                "Could not rewrite "
+                "the question:",
                 error,
             )
 
             standalone_question = question
 
-        if standalone_question != question:
+        if (
+            standalone_question
+            != question
+        ):
+
             print(
                 "\nQuestion understood as:",
                 standalone_question,
@@ -1416,46 +1722,58 @@ def main():
         # Retrieve transcript evidence
         # ------------------------------------------
 
-        retrieved_chunks = retrieve_relevant_chunks(
-            
-            question=standalone_question,
-            embedding_model=embedding_model,
-            faiss_index=faiss_index,
-            chunks=chunks,
-            top_k=8,
+        retrieved_chunks = (
+            retrieve_relevant_chunks(
+                question=standalone_question,
+                embedding_model=embedding_model,
+                faiss_index=faiss_index,
+                chunks=chunks,
+                top_k=8,
+            )
         )
+
+        # ------------------------------------------
+        # Rerank
+        # ------------------------------------------
+
         reranked_chunks = rerank_chunks(
-    question=standalone_question,
-    retrieved_chunks=retrieved_chunks,
-    reranker_model=reranker_model,
-    top_k=3,
-)
-        print("\nRetrieved candidates:")
+            question=standalone_question,
+            retrieved_chunks=retrieved_chunks,
+            reranker_model=reranker_model,
+            top_k=3,
+        )
+
+        print(
+            "\nRetrieved candidates:"
+        )
 
         for number, chunk in enumerate(
             retrieved_chunks,
             start=1,
         ):
-            print(f"\nCandidate {number}"
-              f" | score={chunk['score']:.3f}"
-              )
-            print(chunk["text"][:300])
+
+            print(
+                f"\nCandidate {number}"
+                f" | score="
+                f"{chunk['score']:.3f}"
+            )
+
+            print(
+                chunk["text"][:300]
+            )
 
         if not retrieved_chunks:
+
             print(
                 "\nNo relevant transcript "
                 "sections were found."
             )
+
             continue
 
-        best_score = retrieved_chunks[0]["score"]
-
-
-
-        
-
-
-        
+        best_score = (
+            retrieved_chunks[0]["score"]
+        )
 
         print(
             f"\nBest similarity score: "
@@ -1463,41 +1781,69 @@ def main():
         )
 
         if best_score < 0.20:
+
             print(
-                "This information does not appear "
-                "to be available in the video."
+                "This information does not "
+                "appear to be available "
+                "in the video."
             )
+
             continue
 
         # ------------------------------------------
         # Generate answer
         # ------------------------------------------
 
-        print("Generating answer with Qwen...")
+        print(
+            "Generating answer..."
+        )
 
         try:
+
             answer = generate_answer(
-        question=standalone_question,
-        retrieved_chunks=reranked_chunks,
-        chat_model=chat_model,
-        conversation_history=conversation_history,
-)
+                question=standalone_question,
+                retrieved_chunks=(
+                    reranked_chunks
+                ),
+                chat_model=chat_model,
+                conversation_history=(
+                    conversation_history
+                ),
+            )
 
         except Exception as error:
-            print("\nQwen could not generate an answer.")
-            print("Make sure Ollama is running.")
-            print("Reason:", error)
+
+            print(
+                "\nCould not generate "
+                "an answer."
+            )
+
+            print(
+                "Reason:",
+                error,
+            )
+
             continue
 
-        print("\nAnswer:")
+        print(
+            "\nAnswer:"
+        )
+
         print(answer)
 
-        print("\nRelevant video sections:")
+        # ------------------------------------------
+        # Relevant sections
+        # ------------------------------------------
+
+        print(
+            "\nRelevant video sections:"
+        )
 
         for number, chunk in enumerate(
-    reranked_chunks,
-    start=1,
-):
+            reranked_chunks,
+            start=1,
+        ):
+
             start_time = format_timestamp(
                 chunk["start"]
             )
@@ -1506,13 +1852,23 @@ def main():
                 chunk["end"]
             )
 
-            print(
-                f"{number}. {start_time}-{end_time} "
-                f"(similarity: "
-                f"{chunk['score']:.3f})"
+            score = chunk.get(
+                "score",
+                0.0,
             )
 
-        # Save the conversation turn.
+            print(
+                f"{number}. "
+                f"{start_time}-"
+                f"{end_time} "
+                f"(similarity: "
+                f"{score:.3f})"
+            )
+
+        # ------------------------------------------
+        # Save conversation
+        # ------------------------------------------
+
         conversation_history.append(
             {
                 "question": question,
